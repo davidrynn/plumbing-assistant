@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PipeWise Field Assistant</title>
+<meta name="description" content="Prototype: AI field assistant for commercial plumbers. Project document Q&A, code lookup, and photo checks.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f6f8; --panel:#ffffff; --panel-2:#eef1f4; --border:#d9dee4;
+    --text:#1b2430; --muted:#5f6b7a; --accent:#0b5fa5; --accent-ink:#ffffff;
+    --accent-soft:#e3eef9; --ok:#1f7a3f; --warn:#b26a00; --bad:#b3261e;
+    --warn-soft:#fff4e0; --bad-soft:#fdeceb; --ok-soft:#e6f4ea;
+    --radius:12px; --shadow:0 1px 2px rgba(0,0,0,.06),0 4px 14px rgba(0,0,0,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f141a; --panel:#171e26; --panel-2:#1f2831; --border:#2b3641;
+      --text:#e7ecf1; --muted:#9aa7b5; --accent:#4ea1e8; --accent-ink:#0b1420;
+      --accent-soft:#17324a; --ok:#5fcf84; --warn:#f0b35a; --bad:#f28b82;
+      --warn-soft:#3a2d12; --bad-soft:#3d1c1a; --ok-soft:#163222;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 4px 14px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f141a; --panel:#171e26; --panel-2:#1f2831; --border:#2b3641;
+    --text:#e7ecf1; --muted:#9aa7b5; --accent:#4ea1e8; --accent-ink:#0b1420;
+    --accent-soft:#17324a; --ok:#5fcf84; --warn:#f0b35a; --bad:#f28b82;
+    --warn-soft:#3a2d12; --bad-soft:#3d1c1a; --ok-soft:#163222;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.45;-webkit-font-smoothing:antialiased}
+  button{font:inherit;color:inherit;cursor:pointer}
+  input,select,textarea{font:inherit;color:inherit}
+
+  /* Layout */
+  .app{min-height:100%;display:flex;flex-direction:column}
+  header{background:var(--panel);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+  .bar{max-width:1100px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;letter-spacing:-.01em}
+  .logo svg{width:28px;height:28px}
+  .proto{font-size:11px;font-weight:600;color:var(--warn);background:var(--warn-soft);padding:2px 8px;border-radius:999px;text-transform:uppercase;letter-spacing:.04em}
+  .spacer{flex:1}
+  .project{display:flex;align-items:center;gap:8px;font-size:14px}
+  .project select{background:var(--panel-2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;min-width:0;max-width:100%}
+  .avatar{width:32px;height:32px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;font-weight:600;font-size:13px}
+
+  nav{max-width:1100px;margin:0 auto;padding:0 16px;display:flex;gap:4px;overflow-x:auto;width:100%}
+  nav button{background:none;border:0;border-bottom:3px solid transparent;padding:10px 12px;color:var(--muted);font-weight:500;white-space:nowrap;display:flex;align-items:center;gap:6px}
+  nav button svg{width:16px;height:16px}
+  nav button.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+  main{max-width:1100px;margin:0 auto;width:100%;padding:16px;flex:1}
+  .view{display:none}
+  .view.active{display:block}
+  .grid{display:grid;grid-template-columns:1fr;gap:16px}
+  @media(min-width:860px){.grid.two{grid-template-columns:2fr 1fr}}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .card h2{font-size:15px;margin:0;padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px}
+  .card .body{padding:16px}
+  .muted{color:var(--muted)}
+  .small{font-size:13px}
+
+  /* Chat */
+  .chat{display:flex;flex-direction:column;min-height:520px}
+  .msgs{flex:1;padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;max-height:60vh}
+  .msg{max-width:88%;padding:12px 14px;border-radius:14px;font-size:15px}
+  .msg.user{align-self:flex-end;background:var(--accent);color:var(--accent-ink);border-bottom-right-radius:4px}
+  .msg.bot{align-self:flex-start;background:var(--panel-2);border-bottom-left-radius:4px}
+  .msg.bot p{margin:0 0 8px}
+  .msg.bot p:last-child{margin-bottom:0}
+  .msg.bot ul{margin:4px 0 8px 18px;padding:0}
+  .cites{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .cite{display:inline-flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:4px 8px;font-size:12px;font-weight:500;color:var(--accent)}
+  .cite svg{width:13px;height:13px}
+  .flag{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:999px;margin-bottom:8px}
+  .flag.warn{background:var(--warn-soft);color:var(--warn)}
+  .flag.ok{background:var(--ok-soft);color:var(--ok)}
+  .flag.bad{background:var(--bad-soft);color:var(--bad)}
+  .typing{display:inline-flex;gap:4px;padding:6px 2px}
+  .typing span{width:7px;height:7px;border-radius:50%;background:var(--muted);animation:b 1s infinite}
+  .typing span:nth-child(2){animation-delay:.15s}.typing span:nth-child(3){animation-delay:.3s}
+  @keyframes b{0%,80%,100%{opacity:.3;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+  .chips{display:flex;flex-wrap:wrap;gap:8px;padding:0 16px 12px}
+  .chip{background:var(--panel);border:1px solid var(--border);border-radius:999px;padding:7px 12px;font-size:13px}
+  .chip:hover{border-color:var(--accent);color:var(--accent)}
+  .composer{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border)}
+  .composer input{flex:1;background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;min-width:0}
+  .btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:10px;padding:0 16px;font-weight:600;min-height:44px;display:inline-flex;align-items:center;gap:6px}
+  .btn.ghost{background:var(--panel-2);color:var(--text);border:1px solid var(--border)}
+  .btn svg{width:18px;height:18px}
+
+  /* Side lists */
+  .list{list-style:none;margin:0;padding:0}
+  .list li{display:flex;align-items:center;gap:10px;padding:10px 16px;border-top:1px solid var(--border);font-size:14px}
+  .list li:first-child{border-top:0}
+  .doc-ic{width:34px;height:34px;border-radius:8px;background:var(--accent-soft);color:var(--accent);display:grid;place-items:center;font-size:11px;font-weight:700;flex:none}
+  .status{margin-left:auto;font-size:12px;font-weight:600}
+  .status.ok{color:var(--ok)}.status.warn{color:var(--warn)}
+
+  /* Code */
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+  .row select,.row input{background:var(--panel-2);border:1px solid var(--border);border-radius:10px;padding:11px 12px;flex:1;min-width:160px}
+  .result{margin-top:16px;padding:14px;background:var(--panel-2);border-radius:10px;font-size:15px}
+  .result h3{margin:0 0 6px;font-size:14px}
+  .result p{margin:0 0 8px}
+  table{width:100%;border-collapse:collapse;font-size:14px;margin:8px 0}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border)}
+  th{color:var(--muted);font-weight:600;font-size:12px}
+
+  /* Photo */
+  .drop{border:2px dashed var(--border);border-radius:var(--radius);padding:28px 16px;text-align:center;color:var(--muted);background:var(--panel-2)}
+  .drop strong{color:var(--text)}
+  .samples{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-top:12px}
+  .sample{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--panel);padding:0;text-align:left}
+  .sample .thumb{height:90px;display:grid;place-items:center;background:linear-gradient(135deg,#54616f,#2d3741);color:#fff}
+  .sample .cap{padding:8px 10px;font-size:12px}
+  .photo-stage{position:relative;border-radius:10px;overflow:hidden;background:#2d3741;aspect-ratio:4/3;display:grid;place-items:center}
+  .photo-stage svg{position:absolute;inset:0;width:100%;height:100%}
+  .finding{display:flex;gap:10px;padding:12px;border-radius:10px;margin-top:10px;background:var(--panel-2);font-size:14px}
+  .finding .n{width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;font-weight:700;font-size:12px;color:#fff}
+  .n.bad{background:var(--bad)}.n.warn{background:var(--warn)}.n.ok{background:var(--ok)}
+
+  footer{border-top:1px solid var(--border);padding:12px 16px;font-size:12px;color:var(--muted);text-align:center}
+
+  /* Modal */
+  .modal{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;padding:16px;z-index:50}
+  .modal.open{display:flex}
+  .sheet{background:var(--panel);border-radius:var(--radius);max-width:720px;width:100%;max-height:90vh;overflow:auto;box-shadow:var(--shadow)}
+  .sheet h2{font-size:15px;margin:0;padding:14px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+  .sheet .close{background:none;border:0;font-size:20px;line-height:1;color:var(--muted)}
+  .page{margin:16px;background:#fff;color:#111;border:1px solid #ccc;padding:28px 32px;font-family:Georgia,serif;font-size:14px;line-height:1.6;min-height:360px}
+  .page .hl{background:#fff2a8;padding:0 2px}
+  .page .hdr{font-size:11px;color:#666;display:flex;justify-content:space-between;border-bottom:1px solid #ddd;padding-bottom:6px;margin-bottom:14px}
+</style>
+</head>
+<body>
+<div class="app">
+<header>
+  <div class="bar">
+    <div class="logo">
+      <svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><rect x="2" y="2" width="28" height="28" rx="7" fill="var(--accent)"/><path d="M9 10h8a5 5 0 0 1 5 5v8" stroke="var(--accent-ink)" stroke-width="3.2" stroke-linecap="round"/><path d="M9 7v6M19 23h6" stroke="var(--accent-ink)" stroke-width="3.2" stroke-linecap="round"/></svg>
+      PipeWise <span class="proto">Prototype</span>
+    </div>
+    <div class="spacer"></div>
+    <div class="project">
+      <span class="muted small">Project</span>
+      <select id="project">
+        <option>Riverside Medical Center, Tower B</option>
+        <option>Lincoln High School Addition</option>
+        <option>Harbor View Mixed-Use, Bldg 3</option>
+      </select>
+    </div>
+    <div class="avatar" title="Mike R., Journeyman Plumber">MR</div>
+  </div>
+  <nav id="nav">
+    <button class="active" data-view="ask"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-8 8H7l-4 3V12a8 8 0 0 1 8-8h2a8 8 0 0 1 8 8z"/></svg>Ask the Project</button>
+    <button data-view="code"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2zm0 0a2 2 0 0 1 2-2h12"/></svg>Code Lookup</button>
+    <button data-view="photo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8a2 2 0 0 1 2-2h2l2-3h6l2 3h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>Photo Check</button>
+    <button data-view="docs"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5"/></svg>Documents</button>
+  </nav>
+</header>
+
+<main>
+  <!-- ASK -->
+  <section class="view active" id="view-ask">
+    <div class="grid two">
+      <div class="card chat">
+        <h2>Ask the Project <span class="muted small" id="askProj">Riverside Medical Center, Tower B</span></h2>
+        <div class="msgs" id="msgs">
+          <div class="msg bot">
+            <p>Ready. I've indexed the spec book, plumbing drawings (P-series), addenda 1 through 3, and 42 approved submittals for this project. Ask me anything about the job, or tap a question below.</p>
+          </div>
+        </div>
+        <div class="chips" id="chips"></div>
+        <div class="composer">
+          <input id="askInput" placeholder="Ask about specs, drawings, submittals, RFIs..." autocomplete="off">
+          <button class="btn ghost" title="Voice input (demo)" aria-label="Voice input"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+          <button class="btn" id="askSend">Send</button>
+        </div>
+      </div>
+      <div>
+        <div class="card">
+          <h2>Indexed for this project</h2>
+          <ul class="list">
+            <li><div class="doc-ic">PDF</div><div>Project Manual Vol. 2<br><span class="muted small">Div 22 Plumbing, 184 pp</span></div><span class="status ok">Indexed</span></li>
+            <li><div class="doc-ic">DWG</div><div>P-Series Drawings<br><span class="muted small">P-001 to P-612, Rev 4</span></div><span class="status ok">Indexed</span></li>
+            <li><div class="doc-ic">ADD</div><div>Addenda 1–3<br><span class="muted small">Latest: Add. 3, Oct 14</span></div><span class="status ok">Indexed</span></li>
+            <li><div class="doc-ic">SUB</div><div>Approved Submittals<br><span class="muted small">42 items</span></div><span class="status ok">Indexed</span></li>
+            <li><div class="doc-ic">RFI</div><div>RFI Log<br><span class="muted small">117 RFIs, 9 open</span></div><span class="status warn">Syncing</span></li>
+          </ul>
+        </div>
+        <div class="card" style="margin-top:16px">
+          <h2>Jurisdiction</h2>
+          <div class="body small">
+            <div><strong>Adopted code:</strong> 2021 IPC with state amendments</div>
+            <div style="margin-top:6px"><strong>AHJ:</strong> City Building Dept., Plumbing Division</div>
+            <div style="margin-top:6px"><strong>Medical gas:</strong> NFPA 99 (2021)</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CODE -->
+  <section class="view" id="view-code">
+    <div class="grid two">
+      <div class="card">
+        <h2>Code Lookup</h2>
+        <div class="body">
+          <div class="row">
+            <select id="codeBook">
+              <option>2021 IPC + state amendments (project default)</option>
+              <option>2021 UPC</option>
+              <option>2018 IPC</option>
+              <option>NFPA 99 (2021) Medical Gas</option>
+            </select>
+            <input id="codeInput" placeholder="e.g. hanger spacing for 2&quot; copper">
+            <button class="btn" id="codeSend">Look up</button>
+          </div>
+          <div class="chips" style="padding:12px 0 0" id="codeChips"></div>
+          <div id="codeResult"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>How answers are sourced</h2>
+        <div class="body small muted">
+          <p style="margin-top:0">Answers cite the code section and, where the project specs are stricter, the spec paragraph that governs. Local amendments are flagged separately.</p>
+          <p>Code text is summarized, not reproduced. Tap a citation to open the official source.</p>
+          <p style="margin-bottom:0">Final interpretation rests with the engineer of record and the AHJ inspector.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PHOTO -->
+  <section class="view" id="view-photo">
+    <div class="grid two">
+      <div class="card">
+        <h2>Photo Check</h2>
+        <div class="body">
+          <div id="photoIntro">
+            <div class="drop">
+              <strong>Take a photo or drop one here</strong><br>
+              <span class="small">Add a note like "is this hanger spacing OK?" or just send the photo.</span>
+              <div style="margin-top:12px"><button class="btn" id="fakeUpload">Use camera</button></div>
+            </div>
+            <div class="muted small" style="margin:14px 0 6px">Or try a sample from the job:</div>
+            <div class="samples" id="samples"></div>
+          </div>
+          <div id="photoResult" style="display:none"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>What it checks</h2>
+        <ul class="list small">
+          <li>Hanger and support spacing vs. spec and code</li>
+          <li>Slope and direction on drainage runs</li>
+          <li>Cleanout placement and access</li>
+          <li>Backflow and cross-connection risks</li>
+          <li>Fire-stopping at penetrations</li>
+          <li>Match to the drawing detail for that location</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- DOCS -->
+  <section class="view" id="view-docs">
+    <div class="card">
+      <h2>Project Documents <button class="btn ghost small" style="min-height:34px">Connect Procore</button></h2>
+      <div class="body" style="padding:0">
+        <table>
+          <thead><tr><th>Document</th><th>Type</th><th>Revision</th><th>Updated</th><th>Status</th></tr></thead>
+          <tbody>
+            <tr><td>Project Manual Vol. 2, Div 22</td><td>Spec</td><td>CD Set</td><td>Aug 2</td><td class="status ok">Indexed</td></tr>
+            <tr><td>Addendum 3</td><td>Addendum</td><td>—</td><td>Oct 14</td><td class="status ok">Indexed</td></tr>
+            <tr><td>P-401 Plumbing Plan, Level 4</td><td>Drawing</td><td>Rev 4</td><td>Oct 14</td><td class="status ok">Indexed</td></tr>
+            <tr><td>P-501 Riser Diagrams</td><td>Drawing</td><td>Rev 3</td><td>Sep 30</td><td class="status ok">Indexed</td></tr>
+            <tr><td>P-601 Details</td><td>Drawing</td><td>Rev 4</td><td>Oct 14</td><td class="status ok">Indexed</td></tr>
+            <tr><td>Submittal 22 11 16-02 Copper Pipe & Fittings</td><td>Submittal</td><td>Approved</td><td>Sep 3</td><td class="status ok">Indexed</td></tr>
+            <tr><td>Submittal 22 05 29-01 Hangers & Supports</td><td>Submittal</td><td>Approved as noted</td><td>Sep 9</td><td class="status ok">Indexed</td></tr>
+            <tr><td>RFI Log export</td><td>RFI</td><td>—</td><td>Today</td><td class="status warn">Syncing</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>PipeWise is a decision aid. Answers cite project documents and code sections for verification. Final calls belong to the engineer of record and the inspector. Prototype, demo data only.</footer>
+</div>
+
+<div class="modal" id="modal">
+  <div class="sheet">
+    <h2><span id="modalTitle">Document</span><button class="close" id="modalClose" aria-label="Close">×</button></h2>
+    <div class="page" id="modalBody"></div>
+  </div>
+</div>
+
+<script>
+// ---------- demo data ----------
+const CITE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h8l5 5v15H6z"/><path d="M14 2v5h5"/></svg>';
+
+const ASK = [
+  {
+    q: "What hanger spacing does the spec require for 2\" copper domestic water?",
+    a: `<span class="flag warn">Spec is stricter than code</span>
+        <p>For 2" Type L copper, the project spec requires hangers at <strong>8 ft max</strong> horizontally and at every floor vertically. The 2021 IPC Table 308.5 would allow 12 ft for copper 1-1/2" and larger, but Section 22 05 29 governs here.</p>
+        <ul><li>Use clevis hangers with copper-plated or felt-isolated contact (Para 2.3.B).</li><li>Add a hanger within 12" of every change in direction (Para 3.2.D).</li><li>The approved hanger submittal was "approved as noted": insulated pipe requires shields at every hanger.</li></ul>`,
+    cites: [
+      {label:"Spec 22 05 29, Para 3.2.A", doc:"spec-hanger"},
+      {label:"IPC 2021 Table 308.5", doc:"ipc-308"},
+      {label:"Submittal 22 05 29-01", doc:"sub-hanger"}
+    ]
+  },
+  {
+    q: "Did Addendum 3 change anything on Level 4?",
+    a: `<span class="flag bad">Revision alert</span>
+        <p>Yes. Addendum 3 (Oct 14) revised sheet <strong>P-401</strong> to Rev 4. Two changes affect Level 4 rough-in:</p>
+        <ul><li>The sanitary main in corridor 4C was rerouted north of grid line D to clear the new duct chase. See clouded area near grid D-7.</li><li>Fixture count in Toilet Room 412 increased from 4 to 6 lavatories; waste is now 3" instead of 2".</li></ul>
+        <p>If your crew is working from the Rev 3 print, the waste size in 412 is wrong.</p>`,
+    cites: [
+      {label:"Addendum 3, Item 7", doc:"add3"},
+      {label:"P-401 Rev 4, Grid D-7", doc:"p401"}
+    ]
+  },
+  {
+    q: "What's the required slope on the 4\" sanitary in the garage?",
+    a: `<span class="flag ok">Spec matches code</span>
+        <p>Minimum <strong>1/8" per foot</strong> for 4" sanitary, per IPC 2021 Table 704.1 and spec Section 22 13 16 Para 3.3.A. The spec adds that where the drawings show 1/4" per foot, the larger slope governs.</p>
+        <p>The garage run on P-201 is noted at 1/4" per foot from the trench drains to CO-G2, so use 1/4" there.</p>`,
+    cites: [
+      {label:"Spec 22 13 16, Para 3.3.A", doc:"spec-slope"},
+      {label:"IPC 2021 Table 704.1", doc:"ipc-704"},
+      {label:"P-201 Rev 2", doc:"p201"}
+    ]
+  },
+  {
+    q: "Is there an open RFI about the med gas zone valves on Level 3?",
+    a: `<p>Yes, <strong>RFI 104</strong> is open. It asks whether the zone valve box in corridor 3B can move 6 ft east to avoid the fire-rated shaft wall. Submitted Oct 9, no response yet from the engineer. Ball is in their court, 11 business days outstanding.</p>
+        <p>Until it's answered, NFPA 99 still requires the valve to be visible and accessible from the corridor it serves, so do not rough it inside the shaft.</p>`,
+    cites: [
+      {label:"RFI 104", doc:"rfi104"},
+      {label:"NFPA 99 5.1.4.8", doc:"nfpa"}
+    ]
+  }
+];
+
+const CODE = [
+  {
+    q: "hanger spacing for 2\" copper",
+    a: `<h3>Hanger spacing, 2" copper tubing</h3>
+        <table><tr><th>Source</th><th>Horizontal</th><th>Vertical</th></tr>
+        <tr><td>IPC 2021 Table 308.5 (copper ≥ 1-1/2")</td><td>12 ft</td><td>10 ft</td></tr>
+        <tr><td>Project spec 22 05 29 (governs)</td><td><strong>8 ft</strong></td><td>Every floor</td></tr></table>
+        <p class="small muted">No state amendment to 308.5. The spec is stricter and governs on this project.</p>`,
+    cites:[{label:"IPC 2021 Table 308.5",doc:"ipc-308"},{label:"Spec 22 05 29",doc:"spec-hanger"}]
+  },
+  {
+    q: "cleanout spacing on horizontal drains",
+    a: `<h3>Cleanouts on horizontal drainage</h3>
+        <p>IPC 2021 Section 708.1.3: cleanouts at intervals not exceeding <strong>100 ft</strong> on horizontal drains and building sewers. Required at every change of direction over 45 degrees (708.1.6), with one cleanout allowed per 40 ft of developed length.</p>
+        <p class="small muted">State amendment: none. Spec 22 13 16 adds a cleanout at the base of every stack.</p>`,
+    cites:[{label:"IPC 2021 708.1.3",doc:"ipc-708"},{label:"Spec 22 13 16",doc:"spec-slope"}]
+  },
+  {
+    q: "backflow preventer for make-up water to boiler",
+    a: `<h3>Boiler make-up water protection</h3>
+        <p>IPC 2021 Table 608.1 requires a <strong>reduced pressure zone (RPZ)</strong> assembly, or a backflow preventer with intermediate atmospheric vent for low-hazard applications without chemical treatment. This project adds chemical treatment per Div 23, so an RPZ is required.</p>
+        <p class="small muted"><strong>Local amendment:</strong> the AHJ requires annual RPZ testing by a certified tester and a test report at final inspection.</p>`,
+    cites:[{label:"IPC 2021 Table 608.1",doc:"ipc-608"},{label:"Local Amendment 608.1.1",doc:"local"}]
+  }
+];
+
+const SAMPLES = [
+  {cap:"Level 4 corridor, copper run", kind:"hanger"},
+  {cap:"Garage trench drain tie-in", kind:"slope"},
+  {cap:"Shaft wall penetration, 3B", kind:"firestop"}
+];
+
+const PHOTOS = {
+  hanger: {
+    title:"Level 4 corridor, 2\" copper domestic hot",
+    boxes:[{x:10,y:38,w:34,h:20,c:"bad",n:1},{x:58,y:36,w:30,h:22,c:"warn",n:2}],
+    findings:[
+      {c:"bad",t:"Hanger spacing looks like roughly 11 to 12 ft between the two visible clevis hangers. Spec 22 05 29 requires 8 ft max for 2\" copper on this job. Add a hanger mid-span."},
+      {c:"warn",t:"No insulation shield visible at the right hanger. The approved submittal was marked to require shields at every hanger on insulated pipe."},
+      {c:"ok",t:"Copper-plated clevis hangers match the approved submittal. Pipe appears to align with the P-401 Rev 4 routing."}
+    ],
+    cites:[{label:"Spec 22 05 29, Para 3.2.A",doc:"spec-hanger"},{label:"Submittal 22 05 29-01",doc:"sub-hanger"}]
+  },
+  slope: {
+    title:"Garage, 4\" sanitary from trench drain TD-3",
+    boxes:[{x:14,y:50,w:70,h:16,c:"ok",n:1}],
+    findings:[
+      {c:"ok",t:"Run falls toward CO-G2 as drawn on P-201. Estimated slope from the photo is consistent with 1/4\" per foot, but a photo can't confirm slope. Check with a level before backfill."},
+      {c:"warn",t:"Bedding under the pipe looks uneven near the trench drain. Spec 22 13 16 Para 3.1.C requires continuous bedding, no point loads."}
+    ],
+    cites:[{label:"P-201 Rev 2",doc:"p201"},{label:"Spec 22 13 16, Para 3.1.C",doc:"spec-slope"}]
+  },
+  firestop: {
+    title:"Shaft wall penetration, corridor 3B",
+    boxes:[{x:36,y:28,w:28,h:40,c:"bad",n:1}],
+    findings:[
+      {c:"bad",t:"Annular space around the 3\" PVC vent is open with no firestop sealant or collar visible. This is a 2-hour rated shaft wall per A-601. A listed through-penetration system is required before cover."},
+      {c:"warn",t:"PVC through a rated assembly needs an intumescent collar, not just sealant. Confirm the UL system number called out in Spec 07 84 13."}
+    ],
+    cites:[{label:"Spec 07 84 13",doc:"firestop"},{label:"A-601 Wall Types",doc:"a601"}]
+  }
+};
+
+const DOCS = {
+  "spec-hanger": {title:"Project Manual Vol. 2 · Section 22 05 29 · Page 22 05 29-6", hdr:["RIVERSIDE MEDICAL CENTER TOWER B","22 05 29 HANGERS AND SUPPORTS FOR PLUMBING"], body:`<p><strong>3.2 HANGER AND SUPPORT INSTALLATION</strong></p><p>A. <span class="hl">Install hangers for copper tubing with the following maximum horizontal spacing: NPS 3/4 and smaller, 5 feet; NPS 1 to NPS 1-1/4, 6 feet; NPS 1-1/2 to NPS 2, 8 feet;</span> NPS 2-1/2 and larger, 10 feet. Support vertical runs at each floor.</p><p>B. Install hangers for steel piping with maximum horizontal spacing per MSS SP-69...</p><p>D. <span class="hl">Install hangers within 12 inches of each horizontal change in direction</span> and at each branch connection.</p>`},
+  "ipc-308": {title:"2021 International Plumbing Code · Table 308.5", hdr:["2021 IPC","CHAPTER 3 GENERAL REGULATIONS"], body:`<p><strong>TABLE 308.5 HANGER SPACING</strong> (summary)</p><table style="font-size:13px"><tr><th>Piping material</th><th>Horizontal</th><th>Vertical</th></tr><tr><td>Copper tubing, 1-1/4" and smaller</td><td>6 ft</td><td>10 ft</td></tr><tr><td><span class="hl">Copper tubing, 1-1/2" and larger</span></td><td><span class="hl">12 ft</span></td><td>10 ft</td></tr><tr><td>PVC pipe</td><td>4 ft</td><td>10 ft</td></tr></table><p class="small">Code text summarized for the prototype. The full table is available from the ICC.</p>`},
+  "sub-hanger": {title:"Submittal 22 05 29-01 · Hangers & Supports · Reviewer stamp", hdr:["SUBMITTAL REVIEW","APPROVED AS NOTED · Sep 9"], body:`<p><strong>Reviewer comments:</strong></p><p>1. <span class="hl">Provide insulation protection shields at every hanger on insulated piping. Shields shall be galvanized steel, minimum 12 inches long for pipe NPS 2 and larger.</span></p><p>2. Copper-plated clevis hangers acceptable for copper tubing.</p>`},
+  "add3": {title:"Addendum No. 3 · Oct 14 · Item 7", hdr:["ADDENDUM NO. 3","RIVERSIDE MEDICAL CENTER TOWER B"], body:`<p><strong>ITEM 7, DRAWING P-401 PLUMBING PLAN LEVEL 4</strong></p><p>a. <span class="hl">Reroute 4" sanitary main in Corridor 4C north of grid line D between grids 6 and 8 to clear revised mechanical chase. See clouded revision.</span></p><p>b. <span class="hl">Toilet Room 412: revise lavatory count from (4) to (6). Revise waste from 2" to 3".</span> Revise vent accordingly.</p><p>c. Reissue sheet P-401 as Revision 4.</p>`},
+  "p401": {title:"P-401 Plumbing Plan, Level 4 · Rev 4", hdr:["P-401 REV 4","GRID D-7 (CLOUDED)"], body:`<p style="text-align:center;color:#888;padding:60px 0">[Drawing excerpt placeholder: clouded sanitary reroute near grid D-7 and revised Toilet Room 412 fixture group]</p>`},
+  "spec-slope": {title:"Project Manual Vol. 2 · Section 22 13 16 · Page 22 13 16-9", hdr:["RIVERSIDE MEDICAL CENTER TOWER B","22 13 16 SANITARY WASTE AND VENT PIPING"], body:`<p><strong>3.3 INSTALLATION</strong></p><p>A. <span class="hl">Install horizontal drainage piping at a minimum slope of 1/8 inch per foot for NPS 3 and larger and 1/4 inch per foot for NPS 2-1/2 and smaller. Where Drawings indicate a greater slope, the greater slope governs.</span></p><p><strong>3.1.C</strong> Provide continuous, uniform bedding under buried piping. Do not support piping on blocks or point loads.</p>`},
+  "ipc-704": {title:"2021 International Plumbing Code · Table 704.1", hdr:["2021 IPC","CHAPTER 7 SANITARY DRAINAGE"], body:`<p><strong>TABLE 704.1 SLOPE OF HORIZONTAL DRAINAGE PIPE</strong> (summary)</p><table style="font-size:13px"><tr><th>Size</th><th>Minimum slope</th></tr><tr><td>2-1/2" or less</td><td>1/4" per ft</td></tr><tr><td><span class="hl">3" to 6"</span></td><td><span class="hl">1/8" per ft</span></td></tr><tr><td>8" or larger</td><td>1/16" per ft</td></tr></table>`},
+  "p201": {title:"P-201 Plumbing Plan, Garage Level · Rev 2", hdr:["P-201 REV 2","TRENCH DRAINS TO CO-G2"], body:`<p style="text-align:center;color:#888;padding:60px 0">[Drawing excerpt placeholder: 4" SAN @ 1/4"/FT from TD-1, TD-2, TD-3 to CO-G2]</p>`},
+  "rfi104": {title:"RFI 104 · Med gas zone valve location, Corridor 3B", hdr:["RFI 104 · OPEN","Submitted Oct 9 · Due Oct 16"], body:`<p><strong>Question:</strong> <span class="hl">Zone valve box ZV-3B conflicts with 2-hr shaft wall at grid C-5. Request to relocate 6'-0" east on same corridor wall.</span> Valve remains visible and accessible from Corridor 3B.</p><p><strong>Response:</strong> <em>Pending, engineer of record.</em></p>`},
+  "nfpa": {title:"NFPA 99 (2021) · 5.1.4.8 Zone Valves", hdr:["NFPA 99","HEALTH CARE FACILITIES CODE"], body:`<p>Zone valves shall be installed so that they are <span class="hl">readily operable from a standing position in the corridor on the same floor they serve</span>, and shall be visible and accessible at all times. Summary only.</p>`},
+  "ipc-708": {title:"2021 International Plumbing Code · 708.1.3", hdr:["2021 IPC","CHAPTER 7 SANITARY DRAINAGE"], body:`<p><strong>708.1.3 Horizontal drains and building drains.</strong> <span class="hl">Horizontal drainage pipes in buildings shall have cleanouts located at intervals of not more than 100 feet.</span> Summary only.</p>`},
+  "ipc-608": {title:"2021 International Plumbing Code · Table 608.1", hdr:["2021 IPC","CHAPTER 6 WATER SUPPLY"], body:`<p><strong>TABLE 608.1 APPLICATION OF BACKFLOW PREVENTERS</strong> (excerpt)</p><p><span class="hl">Reduced pressure principle backflow preventer: high hazard, backsiphonage or backpressure.</span> Boiler feed with chemical additives is classified high hazard.</p>`},
+  "local": {title:"City Plumbing Amendments · 608.1.1", hdr:["LOCAL AMENDMENTS","PLUMBING DIVISION"], body:`<p><strong>608.1.1 Testing.</strong> <span class="hl">All reduced pressure principle assemblies shall be tested upon installation and annually thereafter by a tester certified by the state.</span> Test reports shall be provided prior to final inspection.</p>`},
+  "firestop": {title:"Project Manual Vol. 1 · Section 07 84 13 Penetration Firestopping", hdr:["RIVERSIDE MEDICAL CENTER TOWER B","07 84 13"], body:`<p><strong>2.2 THROUGH-PENETRATION FIRESTOP SYSTEMS</strong></p><p>B. <span class="hl">For combustible (plastic) pipe through rated assemblies, provide UL-listed systems incorporating intumescent collars or wrap strips.</span> Sealant alone is not acceptable.</p>`},
+  "a601": {title:"A-601 Wall Types · Type S2", hdr:["A-601","WALL TYPES"], body:`<p><strong>Type S2, Shaft Wall.</strong> <span class="hl">2-hour fire resistance rating, UL U415.</span> All penetrations to be firestopped per 07 84 13.</p>`}
+};
+
+// ---------- helpers ----------
+const $ = s => document.querySelector(s);
+const citeHtml = cites => `<div class="cites">${cites.map(c=>`<button class="cite" data-doc="${c.doc}">${CITE_ICON}${c.label}</button>`).join("")}</div>`;
+
+document.addEventListener("click", e=>{
+  const c = e.target.closest(".cite");
+  if(c){ openDoc(c.dataset.doc); }
+});
+function openDoc(id){
+  const d = DOCS[id]; if(!d) return;
+  $("#modalTitle").textContent = d.title;
+  $("#modalBody").innerHTML = `<div class="hdr"><span>${d.hdr[0]}</span><span>${d.hdr[1]}</span></div>${d.body}`;
+  $("#modal").classList.add("open");
+}
+$("#modalClose").onclick = ()=>$("#modal").classList.remove("open");
+$("#modal").onclick = e=>{ if(e.target.id==="modal") $("#modal").classList.remove("open"); };
+
+// nav
+$("#nav").addEventListener("click", e=>{
+  const b = e.target.closest("button"); if(!b) return;
+  document.querySelectorAll("#nav button").forEach(x=>x.classList.toggle("active", x===b));
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active", v.id==="view-"+b.dataset.view));
+});
+$("#project").onchange = e=> $("#askProj").textContent = e.target.value;
+
+// ---------- ask ----------
+const msgs = $("#msgs");
+function addMsg(cls, html){ const d=document.createElement("div"); d.className="msg "+cls; d.innerHTML=html; msgs.appendChild(d); msgs.scrollTop=msgs.scrollHeight; return d; }
+function renderChips(){
+  $("#chips").innerHTML = ASK.map((x,i)=>`<button class="chip" data-i="${i}">${x.q}</button>`).join("");
+}
+renderChips();
+$("#chips").onclick = e=>{ const c=e.target.closest(".chip"); if(c) ask(ASK[c.dataset.i].q); };
+$("#askSend").onclick = ()=>{ const v=$("#askInput").value.trim(); if(v) ask(v); };
+$("#askInput").onkeydown = e=>{ if(e.key==="Enter") $("#askSend").click(); };
+
+function ask(q){
+  $("#askInput").value="";
+  addMsg("user", q);
+  const t = addMsg("bot", '<div class="typing"><span></span><span></span><span></span></div>');
+  const hit = ASK.find(x=>x.q===q) || ASK.find(x=>q.toLowerCase().split(" ").filter(w=>w.length>4).some(w=>x.q.toLowerCase().includes(w)));
+  setTimeout(()=>{
+    if(hit){ t.innerHTML = hit.a + citeHtml(hit.cites); }
+    else { t.innerHTML = `<p>I don't have a scripted answer for that in this prototype. In the working version, I'd search the spec book, drawings, addenda and submittals for this project and reply with citations.</p><p class="small muted">Try one of the suggested questions below.</p>`; }
+    msgs.scrollTop = msgs.scrollHeight;
+  }, 1100);
+}
+
+// ---------- code ----------
+$("#codeChips").innerHTML = CODE.map((x,i)=>`<button class="chip" data-i="${i}">${x.q}</button>`).join("");
+$("#codeChips").onclick = e=>{ const c=e.target.closest(".chip"); if(c) lookup(CODE[c.dataset.i].q); };
+$("#codeSend").onclick = ()=>{ const v=$("#codeInput").value.trim(); if(v) lookup(v); };
+$("#codeInput").onkeydown = e=>{ if(e.key==="Enter") $("#codeSend").click(); };
+function lookup(q){
+  $("#codeInput").value = q;
+  const r = $("#codeResult");
+  r.innerHTML = `<div class="result"><div class="typing"><span></span><span></span><span></span></div></div>`;
+  const hit = CODE.find(x=>x.q===q) || CODE.find(x=>q.toLowerCase().split(" ").filter(w=>w.length>4).some(w=>x.q.includes(w)));
+  setTimeout(()=>{
+    r.innerHTML = `<div class="result">${hit ? hit.a + citeHtml(hit.cites) : `<p>No scripted answer for that in the prototype. The working version would answer from the selected code edition plus this project's amendments and specs.</p>`}</div>`;
+  }, 900);
+}
+
+// ---------- photo ----------
+$("#samples").innerHTML = SAMPLES.map(s=>`<button class="sample" data-kind="${s.kind}"><div class="thumb">${pipeIcon()}</div><div class="cap">${s.cap}</div></button>`).join("");
+$("#samples").onclick = e=>{ const s=e.target.closest(".sample"); if(s) analyze(s.dataset.kind); };
+$("#fakeUpload").onclick = ()=>analyze("hanger");
+function pipeIcon(){ return '<svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8a2 2 0 0 1 2-2h2l2-3h6l2 3h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><circle cx="12" cy="13" r="3.5"/></svg>'; }
+
+function analyze(kind){
+  const p = PHOTOS[kind];
+  $("#photoIntro").style.display="none";
+  const r = $("#photoResult"); r.style.display="block";
+  r.innerHTML = `<div class="photo-stage" id="stage">${scenePlaceholder(kind)}</div>
+    <div class="muted small" style="margin-top:10px"><div class="typing"><span></span><span></span><span></span></div> Matching to P-series drawings and spec...</div>`;
+  setTimeout(()=>{
+    const colors = {bad:"var(--bad)",warn:"var(--warn)",ok:"var(--ok)"};
+    const boxes = p.boxes.map(b=>`<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="none" stroke="${colors[b.c]}" stroke-width="1" rx="1"/><circle cx="${b.x}" cy="${b.y}" r="3.2" fill="${colors[b.c]}"/><text x="${b.x}" y="${b.y+1.2}" font-size="3.4" font-weight="700" fill="#fff" text-anchor="middle">${b.n}</text>`).join("");
+    r.innerHTML = `<div class="photo-stage">${scenePlaceholder(kind)}<svg viewBox="0 0 100 75" preserveAspectRatio="none">${boxes}</svg></div>
+      <h3 style="font-size:15px;margin:14px 0 4px">${p.title}</h3>
+      <div class="muted small">Located on sheet ${kind==="slope"?"P-201":kind==="firestop"?"P-301 / A-601":"P-401 Rev 4"} using the photo's GPS tag and your crew's work area.</div>
+      ${p.findings.map((f,i)=>`<div class="finding"><div class="n ${f.c}">${i+1}</div><div>${f.t}</div></div>`).join("")}
+      ${citeHtml(p.cites)}
+      <div class="row" style="margin-top:14px"><button class="btn ghost" id="again">Check another photo</button><button class="btn">Create punch item</button></div>`;
+    $("#again").onclick = ()=>{ r.style.display="none"; $("#photoIntro").style.display="block"; };
+  }, 1400);
+}
+function scenePlaceholder(kind){
+  // Stylized stand-in for a job-site photo
+  const pipes = kind==="firestop"
+    ? `<rect x="35" y="0" width="30" height="75" fill="#8a8f96"/><rect x="47" y="0" width="6" height="75" fill="#e9e9e9"/><ellipse cx="50" cy="40" rx="8" ry="5" fill="#3b3f45"/>`
+    : kind==="slope"
+    ? `<rect x="0" y="45" width="100" height="30" fill="#6b5a46"/><path d="M12 58 L88 54" stroke="#d8d8d8" stroke-width="7" stroke-linecap="round"/><rect x="6" y="40" width="10" height="12" fill="#444"/>`
+    : `<rect x="0" y="0" width="100" height="75" fill="#3a434d"/><rect x="0" y="0" width="100" height="18" fill="#2a3139"/><path d="M4 47 L96 47" stroke="#c98a4b" stroke-width="7" stroke-linecap="round"/><path d="M20 18 L20 44 M72 18 L72 44" stroke="#9aa3ad" stroke-width="1.6"/><path d="M16 44 Q20 50 24 44 M68 44 Q72 50 76 44" stroke="#9aa3ad" stroke-width="1.6" fill="none"/>`;
+  return `<svg viewBox="0 0 100 75" preserveAspectRatio="none" style="position:absolute;inset:0;width:100%;height:100%">${pipes}</svg><span style="position:absolute;bottom:8px;right:10px;font-size:11px;color:#cfd6dd;background:rgba(0,0,0,.4);padding:2px 6px;border-radius:4px">Simulated job-site photo</span>`;
+}
+</script>
+</body>
+</html>
